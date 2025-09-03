@@ -5,9 +5,8 @@ import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 import streamlit as st
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.options import Options
+import pyppeteer
+from pyppeteer import launch
 
 # ------------------------------
 # Logging configuration
@@ -68,27 +67,29 @@ def get_user_input():
     return pages_to_scrape, filters
 
 # ------------------------------
-# Scraping function using Selenium
+# Scraping function using Pyppeteer (Headless Chrome)
 # ------------------------------
-def scrape_page_with_selenium(url):
+async def scrape_page_with_pyppeteer(url):
     """
-    Scrape Zillow FSBO listings from the given URL using Selenium to handle JavaScript-rendered content.
+    Scrape Zillow FSBO listings from the given URL using pyppeteer (Headless Chrome).
     Returns a list of listings.
     """
     try:
-        # Set up Chrome options for headless browsing
-        chrome_options = Options()
-        chrome_options.add_argument("--headless")  # Run without UI (headless mode)
+        # Launching headless browser
+        browser = await launch(headless=True)
+        page = await browser.newPage()
 
-        # Initialize WebDriver (make sure you have ChromeDriver installed)
-        driver = webdriver.Chrome(executable_path='/path/to/chromedriver', options=chrome_options)
+        # Set the user-agent
+        user_agent = random.choice(user_agents)
+        await page.setUserAgent(user_agent)
 
-        driver.get(url)  # Open the URL in Selenium
-        time.sleep(3)  # Allow time for JavaScript to load
+        await page.goto(url)  # Visit the page
+        await page.waitForSelector('article.list-card')  # Wait for listings to load
 
-        # Get the page source after JavaScript execution
-        soup = BeautifulSoup(driver.page_source, 'html.parser')
+        # Get page content
+        content = await page.content()
 
+        soup = BeautifulSoup(content, 'html.parser')
         listings = soup.find_all('article', class_='list-card')
 
         if not listings:
@@ -111,14 +112,12 @@ def scrape_page_with_selenium(url):
                 logger.error(f"Error parsing a listing: {e}")
 
         logger.info(f"Scraped {len(data)} listings from this page.")
+        await browser.close()
         return data
 
     except Exception as e:
-        logger.error(f"Failed to scrape with Selenium: {e}")
+        logger.error(f"Failed to scrape with Pyppeteer: {e}")
         return []
-
-    finally:
-        driver.quit()  # Close the browser after scraping
 
 # ------------------------------
 # Main Streamlit App
@@ -149,7 +148,7 @@ def main():
         with st.spinner("Scraping... Please wait, this may take several minutes."):
             for page_num in range(1, pages_to_scrape + 1):
                 page_url = f"{base_url}&page={page_num}"
-                page_data = scrape_page_with_selenium(page_url)
+                page_data = st.experimental_asyncio.run(scrape_page_with_pyppeteer(page_url))
                 all_data.extend(page_data)
 
                 # Delay to avoid anti-scraping detection
