@@ -4,12 +4,25 @@ import pandas as pd
 import streamlit as st
 import time
 import logging
+import random
 
 # ------------------------------
 # Logging configuration
 # ------------------------------
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger()
+
+# ------------------------------
+# User-Agent rotation (list of common user agents)
+# ------------------------------
+user_agents = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.93 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.88 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 6.1; WOW64; rv:40.0) Gecko/20100101 Firefox/40.0",
+    "Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:50.0) Gecko/20100101 Firefox/50.0",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.159 Safari/537.36"
+]
 
 # ------------------------------
 # Authentication function
@@ -60,11 +73,11 @@ def scrape_page(url):
     Returns a list of listings.
     """
     try:
+        # Randomly select a user-agent from the list
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-                          " AppleWebKit/537.36 (KHTML, like Gecko)"
-                          " Chrome/120.0.0.0 Safari/537.36"
+            "User-Agent": random.choice(user_agents)
         }
+
         response = requests.get(url, headers=headers, timeout=15)
         response.raise_for_status()
 
@@ -83,8 +96,8 @@ def scrape_page(url):
                 link = listing.find('a', class_='list-card-link')['href'] if listing.find('a', class_='list-card-link') else "N/A"
                 details = listing.find('ul', class_='list-card-details')
                 bedrooms = details.find_all('li')[0].get_text() if details else "N/A"
-                bathrooms = details.find_all('li')[1].get_text() if details and len(details.find_all('li'))>1 else "N/A"
-                sqft = details.find_all('li')[2].get_text() if details and len(details.find_all('li'))>2 else "N/A"
+                bathrooms = details.find_all('li')[1].get_text() if details and len(details.find_all('li')) > 1 else "N/A"
+                sqft = details.find_all('li')[2].get_text() if details and len(details.find_all('li')) > 2 else "N/A"
 
                 data.append([address, price, link, bedrooms, bathrooms, sqft])
             except Exception as e:
