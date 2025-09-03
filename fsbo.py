@@ -5,13 +5,12 @@ import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 import streamlit as st
-import asyncio
-import nest_asyncio
-from pyppeteer import launch
-from concurrent.futures import ThreadPoolExecutor
-
-# Patch the event loop to work with Streamlit's async environment
-nest_asyncio.apply()
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+import os
+import zipfile
 
 # ------------------------------
 # Logging configuration
@@ -72,29 +71,40 @@ def get_user_input():
     return pages_to_scrape, filters
 
 # ------------------------------
-# Scraping function using Pyppeteer (Headless Chrome)
+# Scraping function using Selenium (Headless Chrome)
 # ------------------------------
-async def scrape_page_with_pyppeteer(url):
+def scrape_page_with_selenium(url):
     """
-    Scrape Zillow FSBO listings from the given URL using pyppeteer (Headless Chrome).
+    Scrape Zillow FSBO listings from the given URL using Selenium with Headless Chrome.
     Returns a list of listings.
     """
     try:
-        # Launching headless browser
-        browser = await launch(headless=True)
-        page = await browser.newPage()
+        # Set up the ChromeDriver path for Streamlit Cloud environment
+        chromedriver_path = '/mnt/data/chromedriver'
+        
+        # Ensure ChromeDriver is installed if not already
+        if not os.path.exists(chromedriver_path):
+            st.write("ChromeDriver not found, downloading...")
+            download_chromedriver()
+        
+        # Set up Chrome options for headless browsing
+        chrome_options = Options()
+        chrome_options.add_argument("--headless")  # Run in headless mode (no UI)
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+
+        # Initialize the WebDriver
+        driver = webdriver.Chrome(executable_path=chromedriver_path, options=chrome_options)
 
         # Set the user-agent
         user_agent = random.choice(user_agents)
-        await page.setUserAgent(user_agent)
+        driver.execute_cdp_cmd('Network.setUserAgentOverride', {"userAgent": user_agent})
 
-        await page.goto(url)  # Visit the page
-        await page.waitForSelector('article.list-card')  # Wait for listings to load
+        driver.get(url)  # Open the page
+        time.sleep(3)  # Allow page to load
 
-        # Get page content
-        content = await page.content()
-
-        soup = BeautifulSoup(content, 'html.parser')
+        # Scrape the page content
+        soup = BeautifulSoup(driver.page_source, 'html.parser')
         listings = soup.find_all('article', class_='list-card')
 
         if not listings:
@@ -117,20 +127,29 @@ async def scrape_page_with_pyppeteer(url):
                 logger.error(f"Error parsing a listing: {e}")
 
         logger.info(f"Scraped {len(data)} listings from this page.")
-        await browser.close()
+        driver.quit()  # Close the browser after scraping
         return data
 
     except Exception as e:
-        logger.error(f"Failed to scrape with Pyppeteer: {e}")
+        logger.error(f"Failed to scrape with Selenium: {e}")
         return []
 
 # ------------------------------
-# Function to run the scraper in a separate thread
+# Function to download ChromeDriver
 # ------------------------------
-def run_scraper(url):
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    return loop.run_until_complete(scrape_page_with_pyppeteer(url))
+def download_chromedriver():
+    chromedriver_url = "https://chromedriver.storage.googleapis.com/113.0.5672.63/chromedriver_linux64.zip"
+    driver_path = '/mnt/data/chromedriver.zip'
+    
+    # Download and extract ChromeDriver
+    response = requests.get(chromedriver_url)
+    with open(driver_path, 'wb') as file:
+        file.write(response.content)
+    
+    with zipfile.ZipFile(driver_path, 'r') as zip_ref:
+        zip_ref.extractall('/mnt/data/')
+    
+    os.remove(driver_path)  # Clean up zip file
 
 # ------------------------------
 # Main Streamlit App
@@ -159,14 +178,13 @@ def main():
 
     if st.button("Start Scraping"):
         with st.spinner("Scraping... Please wait, this may take several minutes."):
-            with ThreadPoolExecutor() as executor:
-                for page_num in range(1, pages_to_scrape + 1):
-                    page_url = f"{base_url}&page={page_num}"
-                    page_data = executor.submit(run_scraper, page_url).result()
-                    all_data.extend(page_data)
+            for page_num in range(1, pages_to_scrape + 1):
+                page_url = f"{base_url}&page={page_num}"
+                page_data = scrape_page_with_selenium(page_url)
+                all_data.extend(page_data)
 
-                    # Delay to avoid anti-scraping detection
-                    time.sleep(30)
+                # Delay to avoid anti-scraping detection
+                time.sleep(30)
 
             if all_data:
                 df = pd.DataFrame(all_data, columns=["Address", "Price", "Listing URL", "Bedrooms", "Bathrooms", "Square Footage"])
