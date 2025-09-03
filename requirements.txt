@@ -4,3 +4,4 @@ beautifulsoup4
 pandas
 selenium
 pyppeteer
+nest_asyncio
