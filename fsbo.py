@@ -8,6 +8,7 @@ import streamlit as st
 import asyncio
 import nest_asyncio
 from pyppeteer import launch
+from concurrent.futures import ThreadPoolExecutor
 
 # Patch the event loop to work with Streamlit's async environment
 nest_asyncio.apply()
@@ -124,6 +125,14 @@ async def scrape_page_with_pyppeteer(url):
         return []
 
 # ------------------------------
+# Function to run the scraper in a separate thread
+# ------------------------------
+def run_scraper(url):
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    return loop.run_until_complete(scrape_page_with_pyppeteer(url))
+
+# ------------------------------
 # Main Streamlit App
 # ------------------------------
 def main():
@@ -150,13 +159,14 @@ def main():
 
     if st.button("Start Scraping"):
         with st.spinner("Scraping... Please wait, this may take several minutes."):
-            for page_num in range(1, pages_to_scrape + 1):
-                page_url = f"{base_url}&page={page_num}"
-                page_data = asyncio.run(scrape_page_with_pyppeteer(page_url))
-                all_data.extend(page_data)
+            with ThreadPoolExecutor() as executor:
+                for page_num in range(1, pages_to_scrape + 1):
+                    page_url = f"{base_url}&page={page_num}"
+                    page_data = executor.submit(run_scraper, page_url).result()
+                    all_data.extend(page_data)
 
-                # Delay to avoid anti-scraping detection
-                time.sleep(30)
+                    # Delay to avoid anti-scraping detection
+                    time.sleep(30)
 
             if all_data:
                 df = pd.DataFrame(all_data, columns=["Address", "Price", "Listing URL", "Bedrooms", "Bathrooms", "Square Footage"])
