@@ -5,7 +5,7 @@ import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 import streamlit as st
-import pyppeteer
+import asyncio
 from pyppeteer import launch
 
 # ------------------------------
@@ -148,7 +148,7 @@ def main():
         with st.spinner("Scraping... Please wait, this may take several minutes."):
             for page_num in range(1, pages_to_scrape + 1):
                 page_url = f"{base_url}&page={page_num}"
-                page_data = st.experimental_asyncio.run(scrape_page_with_pyppeteer(page_url))
+                page_data = asyncio.run(scrape_page_with_pyppeteer(page_url))
                 all_data.extend(page_data)
 
                 # Delay to avoid anti-scraping detection
