@@ -9,10 +9,10 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger()
 
-# Password authentication
+# Password authentication using Streamlit secrets
 def authenticate():
     password = st.text_input("Enter password", type="password")
-    if password == "heLLoRonnie!!":
+    if password == st.secrets["password"]:  # Use password from Streamlit secrets
         return True
     elif password != "":
         st.error("Incorrect password!")
@@ -41,18 +41,28 @@ def scrape_page(url):
         response.raise_for_status()  # Will raise HTTPError for bad responses (4xx, 5xx)
         soup = BeautifulSoup(response.text, 'html.parser')
 
-        listings = soup.find_all('div', class_="list-card")
+        # Look for all the listing items on the page
+        listings = soup.find_all('article', class_="list-card")  # Adjusted for common listing tag
+        if not listings:
+            logger.warning("No listings found on the page.")
+            return []
+
         data = []
 
         for listing in listings:
-            address = listing.find('address').get_text() if listing.find('address') else None
-            price = listing.find('div', class_="list-card-price").get_text() if listing.find('div', class_="list-card-price") else None
-            link = listing.find('a', class_="list-card-link")['href'] if listing.find('a', class_="list-card-link") else None
-            bedrooms = listing.find('ul', class_="list-card-details").find_all('li')[0].get_text() if listing.find('ul', class_="list-card-details") else None
-            bathrooms = listing.find('ul', class_="list-card-details").find_all('li')[1].get_text() if listing.find('ul', class_="list-card-details") else None
-            sqft = listing.find('ul', class_="list-card-details").find_all('li')[2].get_text() if listing.find('ul', class_="list-card-details") else None
+            try:
+                address = listing.find('address').get_text() if listing.find('address') else "N/A"
+                price = listing.find('div', class_="list-card-price").get_text() if listing.find('div', class_="list-card-price") else "N/A"
+                link = listing.find('a', class_="list-card-link")['href'] if listing.find('a', class_="list-card-link") else "N/A"
+                bedrooms = listing.find('ul', class_="list-card-details").find_all('li')[0].get_text() if listing.find('ul', class_="list-card-details") else "N/A"
+                bathrooms = listing.find('ul', class_="list-card-details").find_all('li')[1].get_text() if listing.find('ul', class_="list-card-details") else "N/A"
+                sqft = listing.find('ul', class_="list-card-details").find_all('li')[2].get_text() if listing.find('ul', class_="list-card-details") else "N/A"
 
-            data.append([address, price, link, bedrooms, bathrooms, sqft])
+                # Store data from each listing
+                data.append([address, price, link, bedrooms, bathrooms, sqft])
+
+            except Exception as e:
+                logger.error(f"Error extracting data from a listing: {e}")
 
         logger.info(f"Successfully scraped {len(data)} listings from the page.")
         return data
@@ -73,17 +83,18 @@ def main():
     # Get user input (number of pages and filters)
     pages_to_scrape, filters = get_user_input()
 
-    # Base URL and logging
-    base_url = "https://www.zillow.com/charlotte-nc/fsbo/?searchQueryState={YOUR_QUERY_PARAMS}"
+    # Define the base URL and logging
+    base_url = "https://www.zillow.com/charlotte-nc/fsbo/?searchQueryState=%7B%22isMapVisible%22%3Atrue%2C%22mapBounds%22%3A%7B%22north%22%3A35.42067033258255%2C%22south%22%3A34.997658980767916%2C%22east%22%3A-80.51206433886718%2C%22west%22%3A-81.1506446611328%7D%2C%22filterState%22%3A%7B%22sort%22%3A%7B%22value%22%3A%22globalrelevanceex%22%7D%2C%22fsba%22%3A%7B%22value%22%3Afalse%7D%2C%22nc%22%3A%7B%22value%22%3Afalse%7D%2C%22cmsn%22%3A%7B%22value%22%3Afalse%7D%2C%22auc%22%3A%7B%22value%22%3Afalse%7D%2C%22fore%22%3A%7B%22value%22%3Afalse%7D%7D%2C%22category%22%3A%22cat2%22%2C%22isListVisible%22%3Atrue%2C%22mapZoom%22%3A11%2C%22usersSearchTerm%22%3A%22Charlotte%2C%20NC%22%2C%22regionSelection%22%3A%5B%7B%22regionId%22%3A24043%2C%22regionType%22%3A6%7D%5D%7D"
 
     all_data = []
-    
+
     if st.button("Start Scraping"):
         with st.spinner("Scraping data... This may take a few moments..."):
             # Scrape pages
             for page_num in range(1, pages_to_scrape + 1):
                 page_url = f"{base_url}&page={page_num}"
 
+                # Scrape data from the page
                 page_data = scrape_page(page_url)
                 all_data.extend(page_data)
 
