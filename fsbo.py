@@ -6,7 +6,11 @@ from bs4 import BeautifulSoup
 import pandas as pd
 import streamlit as st
 import asyncio
+import nest_asyncio
 from pyppeteer import launch
+
+# Patch the event loop to work with Streamlit's async environment
+nest_asyncio.apply()
 
 # ------------------------------
 # Logging configuration
