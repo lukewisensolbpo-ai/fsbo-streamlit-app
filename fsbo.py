@@ -80,7 +80,7 @@ def scrape_page_with_selenium(url):
     """
     try:
         # Set up the ChromeDriver path for Streamlit Cloud environment
-        chromedriver_path = '/mnt/data/chromedriver'
+        chromedriver_path = '/mnt/data/chromedriver/chromedriver'
         
         # Ensure ChromeDriver is installed if not already
         if not os.path.exists(chromedriver_path):
@@ -147,7 +147,7 @@ def download_chromedriver():
         file.write(response.content)
     
     with zipfile.ZipFile(driver_path, 'r') as zip_ref:
-        zip_ref.extractall('/mnt/data/')
+        zip_ref.extractall('/mnt/data/chromedriver')
     
     os.remove(driver_path)  # Clean up zip file
 
