@@ -1,10 +1,13 @@
+import time
+import random
+import logging
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 import streamlit as st
-import time
-import logging
-import random
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
 
 # ------------------------------
 # Logging configuration
@@ -65,23 +68,27 @@ def get_user_input():
     return pages_to_scrape, filters
 
 # ------------------------------
-# Scraping function
+# Scraping function using Selenium
 # ------------------------------
-def scrape_page(url):
+def scrape_page_with_selenium(url):
     """
-    Scrape Zillow FSBO listings from the given URL.
+    Scrape Zillow FSBO listings from the given URL using Selenium to handle JavaScript-rendered content.
     Returns a list of listings.
     """
     try:
-        # Randomly select a user-agent from the list
-        headers = {
-            "User-Agent": random.choice(user_agents)
-        }
+        # Set up Chrome options for headless browsing
+        chrome_options = Options()
+        chrome_options.add_argument("--headless")  # Run without UI (headless mode)
 
-        response = requests.get(url, headers=headers, timeout=15)
-        response.raise_for_status()
+        # Initialize WebDriver (make sure you have ChromeDriver installed)
+        driver = webdriver.Chrome(executable_path='/path/to/chromedriver', options=chrome_options)
 
-        soup = BeautifulSoup(response.text, 'html.parser')
+        driver.get(url)  # Open the URL in Selenium
+        time.sleep(3)  # Allow time for JavaScript to load
+
+        # Get the page source after JavaScript execution
+        soup = BeautifulSoup(driver.page_source, 'html.parser')
+
         listings = soup.find_all('article', class_='list-card')
 
         if not listings:
@@ -106,9 +113,12 @@ def scrape_page(url):
         logger.info(f"Scraped {len(data)} listings from this page.")
         return data
 
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Request failed: {e}")
+    except Exception as e:
+        logger.error(f"Failed to scrape with Selenium: {e}")
         return []
+
+    finally:
+        driver.quit()  # Close the browser after scraping
 
 # ------------------------------
 # Main Streamlit App
@@ -139,7 +149,7 @@ def main():
         with st.spinner("Scraping... Please wait, this may take several minutes."):
             for page_num in range(1, pages_to_scrape + 1):
                 page_url = f"{base_url}&page={page_num}"
-                page_data = scrape_page(page_url)
+                page_data = scrape_page_with_selenium(page_url)
                 all_data.extend(page_data)
 
                 # Delay to avoid anti-scraping detection
